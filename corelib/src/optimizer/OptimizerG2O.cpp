@@ -59,11 +59,9 @@ typedef Eigen::Matrix<double,Eigen::Dynamic,Eigen::Dynamic,Eigen::ColMajor> Matr
 #include "g2o/config.h"
 #include "g2o/types/slam2d/types_slam2d.h"
 #include "g2o/types/slam3d/types_slam3d.h"
-#include "g2o/edge_se3_xyzprior.h" // Include after types_slam3d.h to be ignored on newest g2o versions
+#include "g2o/edge_se3_xyzprior.h"
 #include "g2o/edge_se3_gravity.h"
 #include "g2o/edge_sbacam_gravity.h"
-#include "g2o/edge_xy_prior.h"  // Include after types_slam2d.h to be ignored on newest g2o versions
-#include "g2o/edge_xyz_prior.h" // Include after types_slam3d.h to be ignored on newest g2o versions
 #ifdef G2O_HAVE_CSPARSE
 #include "g2o/solvers/csparse/linear_solver_csparse.h"
 #endif
@@ -109,8 +107,6 @@ typedef VertexPointXYZ VertexSBAPointXYZ;
 enum {
     PARAM_OFFSET=0,
 };
-
-#define MULTICAM_OFFSET 10 // 10 means max 10 cameras per pose
 
 namespace rtabmap {
 
@@ -535,37 +531,11 @@ std::map<int, Transform> OptimizerG2O::optimize(
 
 			if(id1 == id2)
 			{
-				if(iter->second.type() == Link::kPosePrior && !priorsIgnored() &&
-				   (!landmarksIgnored() || id1>0))
+				if(iter->second.type() == Link::kPosePrior && !priorsIgnored())
 				{
-					int idTag= id1;
-					if(id1<0)
-					{
-						// landmark prior, offset ids
-						id1 = landmarkVertexOffset - id1;
-						id2 = landmarkVertexOffset - id2;
-					}
-
 					if(isSlam2d())
 					{
-						if(idTag < 0 && !isLandmarkWithRotation.at(idTag))
-						{
-							g2o::EdgeXYPrior * priorEdge = new g2o::EdgeXYPrior();
-							g2o::VertexPointXY* v1 = (g2o::VertexPointXY*)optimizer.vertex(id1);
-							priorEdge->setVertex(0, v1);
-							priorEdge->setMeasurement(Eigen::Vector2d(iter->second.transform().x(), iter->second.transform().y()));
-							Eigen::Matrix<double, 2, 2> information = Eigen::Matrix<double, 2, 2>::Identity();
-							if(!isCovarianceIgnored())
-							{
-								information(0,0) = iter->second.infMatrix().at<double>(0,0); // x-x
-								information(0,1) = iter->second.infMatrix().at<double>(0,1); // x-y
-								information(1,0) = iter->second.infMatrix().at<double>(1,0); // y-x
-								information(1,1) = iter->second.infMatrix().at<double>(1,1); // y-y
-							}
-							priorEdge->setInformation(information);
-							edge = priorEdge;
-						}
-						else if (1 / static_cast<double>(iter->second.infMatrix().at<double>(5,5)) >= 9999.0)
+						if (1 / static_cast<double>(iter->second.infMatrix().at<double>(5,5)) >= 9999.0)
 						{
 							g2o::EdgeSE2XYPrior * priorEdge = new g2o::EdgeSE2XYPrior();
 							g2o::VertexSE2* v1 = (g2o::VertexSE2*)optimizer.vertex(id1);
@@ -608,36 +578,12 @@ std::map<int, Transform> OptimizerG2O::optimize(
 					}
 					else
 					{
-						if(idTag < 0 && !isLandmarkWithRotation.at(idTag))
-						{
-							//XYZ case
-							g2o::EdgeXYZPrior * priorEdge = new g2o::EdgeXYZPrior();
-							g2o::VertexPointXYZ* v1 = (g2o::VertexPointXYZ*)optimizer.vertex(id1);
-							priorEdge->setVertex(0, v1);
-							priorEdge->setMeasurement(Eigen::Vector3d(iter->second.transform().x(), iter->second.transform().y(), iter->second.transform().z()));
-							priorEdge->setParameterId(0, PARAM_OFFSET);
-							Eigen::Matrix<double, 3, 3> information = Eigen::Matrix<double, 3, 3>::Identity();
-							if(!isCovarianceIgnored())
-							{
-								information(0,0) = iter->second.infMatrix().at<double>(0,0); // x-x
-								information(0,1) = iter->second.infMatrix().at<double>(0,1); // x-y
-								information(0,2) = iter->second.infMatrix().at<double>(0,2); // x-z
-								information(1,0) = iter->second.infMatrix().at<double>(1,0); // y-x
-								information(1,1) = iter->second.infMatrix().at<double>(1,1); // y-y
-								information(1,2) = iter->second.infMatrix().at<double>(1,2); // y-z
-								information(2,0) = iter->second.infMatrix().at<double>(2,0); // z-x
-								information(2,1) = iter->second.infMatrix().at<double>(2,1); // z-y
-								information(2,2) = iter->second.infMatrix().at<double>(2,2); // z-z
-							}
-							priorEdge->setInformation(information);
-							edge = priorEdge;
-						}
-						else if (1 / static_cast<double>(iter->second.infMatrix().at<double>(3,3)) >= 9999.0 ||
+						if (1 / static_cast<double>(iter->second.infMatrix().at<double>(3,3)) >= 9999.0 ||
 						    1 / static_cast<double>(iter->second.infMatrix().at<double>(4,4)) >= 9999.0 ||
 							1 / static_cast<double>(iter->second.infMatrix().at<double>(5,5)) >= 9999.0)
 						{
 							//GPS XYZ case
-							g2o::EdgeSE3XYZPrior * priorEdge = new g2o::EdgeSE3XYZPrior();
+							EdgeSE3XYZPrior * priorEdge = new EdgeSE3XYZPrior();
 							g2o::VertexSE3* v1 = (g2o::VertexSE3*)optimizer.vertex(id1);
 							priorEdge->setVertex(0, v1);
 							priorEdge->setMeasurement(Eigen::Vector3d(iter->second.transform().x(), iter->second.transform().y(), iter->second.transform().z()));
@@ -1397,7 +1343,7 @@ std::map<int, Transform> OptimizerG2O::optimizeBA(
 		int rootId,
 		const std::map<int, Transform> & poses,
 		const std::multimap<int, Link> & links,
-		const std::map<int, std::vector<CameraModel> > & models,
+		const std::map<int, CameraModel> & models,
 		std::map<int, cv::Point3f> & points3DMap,
 		const std::map<int, std::map<int, FeatureBA> > & wordReferences,
 		std::set<int> * outliers)
@@ -1490,55 +1436,50 @@ std::map<int, Transform> OptimizerG2O::optimizeBA(
 			if(iter->first > 0)
 			{
 				// Get camera model
-				std::map<int, std::vector<CameraModel> >::const_iterator iterModel = models.find(iter->first);
-				UASSERT(iterModel != models.end() && !iterModel->second.empty());
-				for(size_t i=0; i<iterModel->second.size(); ++i)
-				{
-					UASSERT(iterModel->second[i].isValidForProjection());
+				std::map<int, CameraModel>::const_iterator iterModel = models.find(iter->first);
+				UASSERT(iterModel != models.end() && iterModel->second.isValidForProjection());
 
-					Transform camPose = iter->second * iterModel->second[i].localTransform();
+				Transform camPose = iter->second * iterModel->second.localTransform();
 
-					// Add node's pose
-					UASSERT(!camPose.isNull());
+				// Add node's pose
+				UASSERT(!camPose.isNull());
 #ifdef RTABMAP_ORB_SLAM
-					g2o::VertexSE3Expmap * vCam = new g2o::VertexSE3Expmap();
+				g2o::VertexSE3Expmap * vCam = new g2o::VertexSE3Expmap();
 #else
-					g2o::VertexCam * vCam = new g2o::VertexCam();
+				g2o::VertexCam * vCam = new g2o::VertexCam();
 #endif
 
-					Eigen::Affine3d a = camPose.toEigen3d();
+				Eigen::Affine3d a = camPose.toEigen3d();
 #ifdef RTABMAP_ORB_SLAM
-					a = a.inverse();
-					vCam->setEstimate(g2o::SE3Quat(a.linear(), a.translation()));
+				a = a.inverse();
+				vCam->setEstimate(g2o::SE3Quat(a.linear(), a.translation()));
 #else
-					g2o::SBACam cam(Eigen::Quaterniond(a.linear()), a.translation());
-					cam.setKcam(
-							iterModel->second[i].fx(),
-							iterModel->second[i].fy(),
-							iterModel->second[i].cx(),
-							iterModel->second[i].cy(),
-							iterModel->second[i].Tx()<0.0?-iterModel->second[i].Tx()/iterModel->second[i].fx():baseline_); // baseline in meters
-					vCam->setEstimate(cam);
+				g2o::SBACam cam(Eigen::Quaterniond(a.linear()), a.translation());
+				cam.setKcam(
+						iterModel->second.fx(),
+						iterModel->second.fy(),
+						iterModel->second.cx(),
+						iterModel->second.cy(),
+						iterModel->second.Tx()<0.0?-iterModel->second.Tx()/iterModel->second.fx():baseline_); // baseline in meters
+				vCam->setEstimate(cam);
 #endif
-					vCam->setId(iter->first*MULTICAM_OFFSET + i);
+				vCam->setId(iter->first);
 
-					// negative root means that all other poses should be fixed instead of the root
-					vCam->setFixed((rootId >= 0 && iter->first == rootId) || (rootId < 0 && iter->first != -rootId));
+				// negative root means that all other poses should be fixed instead of the root
+				vCam->setFixed((rootId >= 0 && iter->first == rootId) || (rootId < 0 && iter->first != -rootId));
 
-					/*UDEBUG("camPose %d (camid=%d) (fixed=%d) fx=%f fy=%f cx=%f cy=%f Tx=%f baseline=%f t=%s",
-							iter->first,
-							vCam->id(),
-							vCam->fixed()?1:0,
-							iterModel->second[i].fx(),
-							iterModel->second[i].fy(),
-							iterModel->second[i].cx(),
-							iterModel->second[i].cy(),
-							iterModel->second[i].Tx(),
-							iterModel->second[i].Tx()<0.0?-iterModel->second[i].Tx()/iterModel->second[i].fx():baseline_,
-							camPose.prettyPrint().c_str());*/
+				/*UDEBUG("cam %d (fixed=%d) fx=%f fy=%f cx=%f cy=%f Tx=%f baseline=%f t=%s",
+						iter->first,
+						vCam->fixed()?1:0,
+						iterModel->second.fx(),
+						iterModel->second.fy(),
+						iterModel->second.cx(),
+						iterModel->second.cy(),
+						iterModel->second.Tx(),
+						iterModel->second.Tx()<0.0?-iterModel->second.Tx()/iterModel->second.fx():baseline_,
+						camPose.prettyPrint().c_str());*/
 
-					UASSERT_MSG(optimizer.addVertex(vCam), uFormat("cannot insert cam vertex %d (pose=%d)!?", vCam->id(), iter->first).c_str());
-				}
+				UASSERT_MSG(optimizer.addVertex(vCam), uFormat("cannot insert vertex %d!?", iter->first).c_str());
 			}
 		}
 
@@ -1570,12 +1511,11 @@ std::map<int, Transform> OptimizerG2O::optimizeBA(
 
 						Eigen::MatrixXd information = Eigen::MatrixXd::Identity(3, 3) * 1.0/(gravitySigma()*gravitySigma());
 
-						g2o::VertexCam* v1 = (g2o::VertexCam*)optimizer.vertex(id1*MULTICAM_OFFSET);
+						g2o::VertexCam* v1 = (g2o::VertexCam*)optimizer.vertex(id1);
 						EdgeSBACamGravity* priorEdge(new EdgeSBACamGravity());
-						std::map<int, std::vector<CameraModel> >::const_iterator iterModel = models.find(iter->first);
-						// Gravity constraint added only to first camera of a pose
-						UASSERT(iterModel != models.end() && !iterModel->second.empty() && !iterModel->second[0].localTransform().isNull());
-						priorEdge->setCameraInvLocalTransform(iterModel->second[0].localTransform().inverse().toEigen3d().linear());
+						std::map<int, CameraModel>::const_iterator iterModel = models.find(iter->first);
+						UASSERT(iterModel != models.end() && !iterModel->second.localTransform().isNull());
+						priorEdge->setCameraInvLocalTransform(iterModel->second.localTransform().inverse().toEigen3d().linear());
 						priorEdge->setMeasurement(m);
 						priorEdge->setInformation(information);
 						priorEdge->vertices()[0] = v1;
@@ -1600,17 +1540,15 @@ std::map<int, Transform> OptimizerG2O::optimizeBA(
 					}
 
 					// between cameras, not base_link
-					Transform camLink = models.at(id1)[0].localTransform().inverse()*iter->second.transform()*models.at(id2)[0].localTransform();
-					/*UDEBUG("added edge %d->%d (camIDs %d->%d) (in cam frame=%s)",
-							id1,
-							id2,
-							id1*MULTICAM_OFFSET,
-							id2*MULTICAM_OFFSET,
-							camLink.prettyPrint().c_str());*/
+					Transform camLink = models.at(id1).localTransform().inverse()*iter->second.transform()*models.at(id2).localTransform();
+					//UDEBUG("added edge %d->%d (in cam frame=%s)",
+					//		id1,
+					//		id2,
+					//		camLink.prettyPrint().c_str());
 #ifdef RTABMAP_ORB_SLAM
 					EdgeSE3Expmap * e = new EdgeSE3Expmap();
-					g2o::VertexSE3Expmap* v1 = (g2o::VertexSE3Expmap*)optimizer.vertex(id1*MULTICAM_OFFSET);
-					g2o::VertexSE3Expmap* v2 = (g2o::VertexSE3Expmap*)optimizer.vertex(id2*MULTICAM_OFFSET);
+					g2o::VertexSE3Expmap* v1 = (g2o::VertexSE3Expmap*)optimizer.vertex(id1);
+					g2o::VertexSE3Expmap* v2 = (g2o::VertexSE3Expmap*)optimizer.vertex(id2);
 
 					Transform camPose1 = Transform::fromEigen3d(v1->estimate()).inverse();
 					Transform camPose2Inv = Transform::fromEigen3d(v2->estimate());
@@ -1618,8 +1556,8 @@ std::map<int, Transform> OptimizerG2O::optimizeBA(
 					camLink =  camPose1 * camPose1 * camLink * camPose2Inv * camPose2Inv;
 #else
 					g2o::EdgeSBACam * e = new g2o::EdgeSBACam();
-					g2o::VertexCam* v1 = (g2o::VertexCam*)optimizer.vertex(id1*MULTICAM_OFFSET);
-					g2o::VertexCam* v2 = (g2o::VertexCam*)optimizer.vertex(id2*MULTICAM_OFFSET);
+					g2o::VertexCam* v1 = (g2o::VertexCam*)optimizer.vertex(id1);
+					g2o::VertexCam* v2 = (g2o::VertexCam*)optimizer.vertex(id2);
 #endif
 					UASSERT(v1 != 0);
 					UASSERT(v2 != 0);
@@ -1639,60 +1577,8 @@ std::map<int, Transform> OptimizerG2O::optimizeBA(
 			}
 		}
 
-		UDEBUG("fill hard edges between camera 0 and other cameras (multicam)...");
-		for(std::map<int, std::vector<CameraModel> >::const_iterator iter=models.begin(); iter!=models.end(); ++iter)
-		{
-			int id = iter->first;
-			if(uContains(poses, id))
-			{
-				for(size_t i=1; i<iter->second.size(); ++i)
-				{
-					// add edge
-					// Set large information matrix to keep these links fixed
-					Eigen::Matrix<double, 6, 6> information = Eigen::Matrix<double, 6, 6>::Identity()*9999999;
-
-					// between cameras, not base_link
-					Transform camLink = iter->second[0].localTransform().inverse()*iter->second[i].localTransform();
-#ifdef RTABMAP_ORB_SLAM
-					EdgeSE3Expmap * e = new EdgeSE3Expmap();
-					g2o::VertexSE3Expmap* v1 = (g2o::VertexSE3Expmap*)optimizer.vertex(id*MULTICAM_OFFSET);
-					g2o::VertexSE3Expmap* v2 = (g2o::VertexSE3Expmap*)optimizer.vertex(id*MULTICAM_OFFSET+i);
-
-					Transform camPose1 = Transform::fromEigen3d(v1->estimate()).inverse();
-					Transform camPose2Inv = Transform::fromEigen3d(v2->estimate());
-
-					camLink =  camPose1 * camPose1 * camLink * camPose2Inv * camPose2Inv;
-#else
-					g2o::EdgeSBACam * e = new g2o::EdgeSBACam();
-					g2o::VertexCam* v1 = (g2o::VertexCam*)optimizer.vertex(id*MULTICAM_OFFSET);
-					g2o::VertexCam* v2 = (g2o::VertexCam*)optimizer.vertex(id*MULTICAM_OFFSET+i);
-#endif
-					/*UDEBUG("added edge between subcam 0->%d id:%d->%d (in cam frame=%s)",
-							i,
-							v1->id(),
-							v2->id(),
-							camLink.prettyPrint().c_str());*/
-
-					UASSERT(v1 != 0);
-					UASSERT(v2 != 0);
-					e->setVertex(0, v1);
-					e->setVertex(1, v2);
-					Eigen::Affine3d a = camLink.toEigen3d();
-					e->setMeasurement(g2o::SE3Quat(a.linear(), a.translation()));
-					e->setInformation(information);
-
-					if (!optimizer.addEdge(e))
-					{
-						delete e;
-						UERROR("Map: Failed adding constraint between %d and %d, skipping", v1->id(), v2->id());
-						return optimizedPoses;
-					}
-				}
-			}
-		}
-
 		UDEBUG("fill 3D points to g2o...");
-		const int stepVertexId = poses.rbegin()->first*MULTICAM_OFFSET+MULTICAM_OFFSET;
+		const int stepVertexId = poses.rbegin()->first+1;
 		int negVertexOffset = stepVertexId;
 		if(wordReferences.size() && wordReferences.rbegin()->first>0)
 		{
@@ -1731,24 +1617,22 @@ std::map<int, Transform> OptimizerG2O::optimizeBA(
 				// set observations
 				for(std::map<int, FeatureBA>::const_iterator jter=iter->second.begin(); jter!=iter->second.end(); ++jter)
 				{
-					int poseId = jter->first;
-					int camIndex = jter->second.cameraIndex;
-					int camId = poseId*MULTICAM_OFFSET+camIndex;
-					if(poses.find(poseId) != poses.end() && optimizer.vertex(camId) != 0)
+					int camId = jter->first;
+					if(poses.find(camId) != poses.end() && optimizer.vertex(camId) != 0)
 					{
 						const FeatureBA & pt = jter->second;
 						double depth = pt.depth;
 
-						//UDEBUG("Added observation pt=%d to cam=%d (%d,%d) depth=%f (camIndex=%d)", vpt3d->id()-stepVertexId, camId, (int)pt.kpt.pt.x, (int)pt.kpt.pt.y, depth, camIndex);
+						//UDEBUG("Added observation pt=%d to cam=%d (%d,%d) depth=%f", vpt3d->id()-stepVertexId, camId, (int)pt.kpt.pt.x, (int)pt.kpt.pt.y, depth);
 
 						g2o::OptimizableGraph::Edge * e;
 						double baseline = 0.0;
 #ifdef RTABMAP_ORB_SLAM
 						g2o::VertexSE3Expmap* vcam = dynamic_cast<g2o::VertexSE3Expmap*>(optimizer.vertex(camId));
-						std::map<int, std::vector<CameraModel> >::const_iterator iterModel = models.find(poseId);
+						std::map<int, CameraModel>::const_iterator iterModel = models.find(camId);
 
-						UASSERT(iterModel != models.end() && camIndex<iterModel->second.size() && iterModel->second[camIndex].isValidForProjection());
-						baseline = iterModel->second[camIndex].Tx()<0.0?-iterModel->second[camIndex].Tx()/iterModel->second[camIndex].fx():baseline_;
+						UASSERT(iterModel != models.end() && iterModel->second.isValidForProjection());
+						baseline = iterModel->second.Tx()<0.0?-iterModel->second.Tx()/iterModel->second.fx():baseline_;
 #else
 						g2o::VertexCam* vcam = dynamic_cast<g2o::VertexCam*>(optimizer.vertex(camId));
 						baseline = vcam->estimate().baseline;
@@ -1759,15 +1643,15 @@ std::map<int, Transform> OptimizerG2O::optimizeBA(
 							// stereo edge
 #ifdef RTABMAP_ORB_SLAM
 							g2o::EdgeStereoSE3ProjectXYZ* es = new g2o::EdgeStereoSE3ProjectXYZ();
-							float disparity = baseline * iterModel->second[camIndex].fx() / depth;
+							float disparity = baseline * iterModel->second.fx() / depth;
 							Eigen::Vector3d obs( pt.kpt.pt.x, pt.kpt.pt.y, pt.kpt.pt.x-disparity);
 							es->setMeasurement(obs);
 							//variance *= log(exp(1)+disparity);
 							es->setInformation(Eigen::Matrix3d::Identity() / variance);
-							es->fx = iterModel->second[camIndex].fx();
-							es->fy = iterModel->second[camIndex].fy();
-							es->cx = iterModel->second[camIndex].cx();
-							es->cy = iterModel->second[camIndex].cy();
+							es->fx = iterModel->second.fx();
+							es->fy = iterModel->second.fy();
+							es->cx = iterModel->second.cx();
+							es->cy = iterModel->second.cy();
 							es->bf = baseline*es->fx;
 							e = es;
 #else
@@ -1795,10 +1679,10 @@ std::map<int, Transform> OptimizerG2O::optimizeBA(
 							Eigen::Vector2d obs( pt.kpt.pt.x, pt.kpt.pt.y);
 							em->setMeasurement(obs);
 							em->setInformation(Eigen::Matrix2d::Identity() / variance);
-							em->fx = iterModel->second[camIndex].fx();
-							em->fy = iterModel->second[camIndex].fy();
-							em->cx = iterModel->second[camIndex].cx();
-							em->cy = iterModel->second[camIndex].cy();
+							em->fx = iterModel->second.fx();
+							em->fy = iterModel->second.fy();
+							em->cx = iterModel->second.cx();
+							em->cy = iterModel->second.cy();
 							e = em;
 
 #else
@@ -1873,13 +1757,13 @@ std::map<int, Transform> OptimizerG2O::optimizeBA(
 						{
 							d = ((g2o::EdgeStereoSE3ProjectXYZ*)(*iter))->measurement()[0]-((g2o::EdgeStereoSE3ProjectXYZ*)(*iter))->measurement()[2];
 						}
-						//UDEBUG("Ignoring edge (%d<->%d) d=%f var=%f kernel=%f chi2=%f", (*iter)->vertex(0)->id()-stepVertexId, (*iter)->vertex(1)->id(), d, 1.0/((g2o::EdgeStereoSE3ProjectXYZ*)(*iter))->information()(0,0), (*iter)->robustKernel()->delta(), (*iter)->chi2());
+						UDEBUG("Ignoring edge (%d<->%d) d=%f var=%f kernel=%f chi2=%f", (*iter)->vertex(0)->id()-stepVertexId, (*iter)->vertex(1)->id(), d, 1.0/((g2o::EdgeStereoSE3ProjectXYZ*)(*iter))->information()(0,0), (*iter)->robustKernel()->delta(), (*iter)->chi2());
 #else
 						if(dynamic_cast<g2o::EdgeProjectP2SC*>(*iter) != 0)
 						{
 							d = ((g2o::EdgeProjectP2SC*)(*iter))->measurement()[0]-((g2o::EdgeProjectP2SC*)(*iter))->measurement()[2];
 						}
-						//UDEBUG("Ignoring edge (%d<->%d) d=%f var=%f kernel=%f chi2=%f", (*iter)->vertex(0)->id()-stepVertexId, (*iter)->vertex(1)->id(), d, 1.0/((g2o::EdgeProjectP2SC*)(*iter))->information()(0,0), (*iter)->robustKernel()->delta(), (*iter)->chi2());
+						UDEBUG("Ignoring edge (%d<->%d) d=%f var=%f kernel=%f chi2=%f", (*iter)->vertex(0)->id()-stepVertexId, (*iter)->vertex(1)->id(), d, 1.0/((g2o::EdgeProjectP2SC*)(*iter))->information()(0,0), (*iter)->robustKernel()->delta(), (*iter)->chi2());
 #endif
 
 						cv::Point3f pt3d;
@@ -1922,11 +1806,10 @@ std::map<int, Transform> OptimizerG2O::optimizeBA(
 		{
 			if(iter->first > 0)
 			{
-				int camId = iter->first*MULTICAM_OFFSET;
 #ifdef RTABMAP_ORB_SLAM
-				const g2o::VertexSE3Expmap* v = (const g2o::VertexSE3Expmap*)optimizer.vertex(camId);
+				const g2o::VertexSE3Expmap* v = (const g2o::VertexSE3Expmap*)optimizer.vertex(iter->first);
 #else
-				const g2o::VertexCam* v = (const g2o::VertexCam*)optimizer.vertex(camId);
+				const g2o::VertexCam* v = (const g2o::VertexCam*)optimizer.vertex(iter->first);
 #endif
 				if(v)
 				{
@@ -1937,7 +1820,7 @@ std::map<int, Transform> OptimizerG2O::optimizeBA(
 #endif
 
 					// remove model local transform
-					t *= models.at(iter->first)[0].localTransform().inverse();
+					t *= models.at(iter->first).localTransform().inverse();
 
 					//UDEBUG("%d from=%s to=%s", iter->first, iter->second.prettyPrint().c_str(), t.prettyPrint().c_str());
 					if(t.isNull())
@@ -1961,7 +1844,7 @@ std::map<int, Transform> OptimizerG2O::optimizeBA(
 				}
 				else
 				{
-					UERROR("Vertex (pose) %d (cam=%d) not found!?", iter->first, camId);
+					UERROR("Vertex (pose) %d not found!?", iter->first);
 				}
 			}
 		}
@@ -2030,26 +1913,26 @@ bool OptimizerG2O::saveGraph(
 		// force periods to be used instead of commas
 		setlocale(LC_ALL, "en_US.UTF-8");
 
-		if(isSlam2d())
-		{
-			// PARAMS_SE2OFFSET id x y theta (set for priors)
-			fprintf(file, "PARAMS_SE2OFFSET %d 0 0 0\n", PARAM_OFFSET);
-		}
-		else
-		{
-			// PARAMS_SE3OFFSET id x y z qw qx qy qz (set for priors)
-			Eigen::Vector3f v = Eigen::Vector3f::Zero();
-			Eigen::Quaternionf q = Eigen::Quaternionf::Identity();
-			fprintf(file, "PARAMS_SE3OFFSET %d %f %f %f %f %f %f %f\n",
-				PARAM_OFFSET,
-				v.x(),
-				v.y(),
-				v.z(),
-				q.x(),
-				q.y(),
-				q.z(),
-				q.w());
-		}
+		// if(isSlam2d())
+		// {
+		// 	// PARAMS_SE2OFFSET id x y theta (set for priors)
+		// 	fprintf(file, "PARAMS_SE2OFFSET %d 0 0 0\n", PARAM_OFFSET);
+		// }
+		// else
+		// {
+		// 	// PARAMS_SE3OFFSET id x y z qw qx qy qz (set for priors)
+		// 	Eigen::Vector3f v = Eigen::Vector3f::Zero();
+		// 	Eigen::Quaternionf q = Eigen::Quaternionf::Identity();
+		// 	fprintf(file, "PARAMS_SE3OFFSET %d %f %f %f %f %f %f %f\n",
+		// 		PARAM_OFFSET,
+		// 		v.x(),
+		// 		v.y(),
+		// 		v.z(),
+		// 		q.x(),
+		// 		q.y(),
+		// 		q.z(),
+		// 		q.w());
+		// }
 
 		int landmarkOffset = poses.size()&&poses.rbegin()->first>0?poses.rbegin()->first+1:0;
 		for(std::map<int, Transform>::const_iterator iter = poses.begin(); iter!=poses.end(); ++iter)
@@ -2076,232 +1959,248 @@ bool OptimizerG2O::saveGraph(
 			}
 			else
 			{
+				std::cout<<iter->first<<"\n";
 				if(iter->first > 0)
 				{
 					// VERTEX_SE3 id x y z qw qx qy qz
-					Eigen::Quaternionf q = iter->second.getQuaternionf();
-					fprintf(file, "VERTEX_SE3:QUAT %d %f %f %f %f %f %f %f\n",
-						iter->first,
-						iter->second.x(),
-						iter->second.y(),
-						iter->second.z(),
-						q.x(),
-						q.y(),
-						q.z(),
-						q.w());
+					// Eigen::Quaternionf q = iter->second.getQuaternionf();
+					// fprintf(file, "VERTEX_SE3:QUAT %d %f %f %f %f %f %f %f\n",
+					// 	iter->first,
+					// 	iter->second.x(),
+					// 	iter->second.y(),
+					// 	iter->second.z(),
+					// 	q.x(),
+					// 	q.y(),
+					// 	q.z(),
+					// 	q.w());
 				}
 				else if(!landmarksIgnored())
 				{
 					// VERTEX_TRACKXYZ id x y z
-					fprintf(file, "VERTEX_TRACKXYZ %d %f %f %f\n",
-						landmarkOffset-iter->first,
+					// Eigen::Quaternionf q = iter->second.getQuaternionf();
+					// fprintf(file, "MARKER %d %f %f %f %f %f %f %f\n",
+					// 	-iter->first,
+					// 	iter->second.x(),
+					// 	iter->second.y(),
+					// 	iter->second.z(),
+					// 	q.x(),
+					// 	q.y(),
+					// 	q.z(),
+					// 	q.w());
+					float roll, pitch, yaw;
+					iter->second.getEulerAngles(roll, pitch, yaw);
+					fprintf(file, "rpy %d %f %f %f %f %f %f\n",
+						-iter->first,
 						iter->second.x(),
 						iter->second.y(),
-						iter->second.z());
+						iter->second.z(),
+						roll,
+						pitch,
+						yaw);
 				}
 			}
 		}
 
-		int virtualVertexId = landmarkOffset - (poses.size()&&poses.rbegin()->first<0?poses.rbegin()->first:0);
-		for(std::multimap<int, Link>::const_iterator iter = edgeConstraints.begin(); iter!=edgeConstraints.end(); ++iter)
-		{
-			if (iter->second.type() == Link::kLandmark)
-			{
-				if (this->landmarksIgnored())
-				{
-					continue;
-				}
-				if(isSlam2d())
-				{
-					// EDGE_SE2_XY observed_vertex_id observing_vertex_id x y inf_11 inf_12 inf_22
-					fprintf(file, "EDGE_SE2_XY %d %d %f %f %f %f %f\n",
-						iter->second.from()<0?landmarkOffset-iter->second.from():iter->second.from(),
-						iter->second.to()<0?landmarkOffset-iter->second.to():iter->second.to(),
-						iter->second.transform().x(),
-						iter->second.transform().y(),
-						iter->second.infMatrix().at<double>(0, 0),
-						iter->second.infMatrix().at<double>(0, 1),
-						iter->second.infMatrix().at<double>(1, 1));
-				}
-				else
-				{
-					// EDGE_SE3_TRACKXYZ observed_vertex_id observing_vertex_id param_offset x y z inf_11 inf_12 inf_13 inf_22 inf_23 inf_33
-					fprintf(file, "EDGE_SE3_TRACKXYZ %d %d %d %f %f %f %f %f %f %f %f %f\n",
-						iter->second.from()<0?landmarkOffset-iter->second.from():iter->second.from(),
-						iter->second.to()<0?landmarkOffset-iter->second.to():iter->second.to(),
-						PARAM_OFFSET,
-						iter->second.transform().x(),
-						iter->second.transform().y(),
-						iter->second.transform().z(),
-						iter->second.infMatrix().at<double>(0, 0),
-						iter->second.infMatrix().at<double>(0, 1),
-						iter->second.infMatrix().at<double>(0, 2),
-						iter->second.infMatrix().at<double>(1, 1),
-						iter->second.infMatrix().at<double>(1, 2),
-						iter->second.infMatrix().at<double>(2, 2));
-				}
-				continue;
-			}
+		// int virtualVertexId = landmarkOffset - (poses.size()&&poses.rbegin()->first<0?poses.rbegin()->first:0);
+		// for(std::multimap<int, Link>::const_iterator iter = edgeConstraints.begin(); iter!=edgeConstraints.end(); ++iter)
+		// {
+		// 	if (iter->second.type() == Link::kLandmark)
+		// 	{
+		// 		if (this->landmarksIgnored())
+		// 		{
+		// 			continue;
+		// 		}
+		// 		if(isSlam2d())
+		// 		{
+		// 			// EDGE_SE2_XY observed_vertex_id observing_vertex_id x y inf_11 inf_12 inf_22
+		// 			fprintf(file, "EDGE_SE2_XY %d %d %f %f %f %f %f\n",
+		// 				iter->second.from()<0?landmarkOffset-iter->second.from():iter->second.from(),
+		// 				iter->second.to()<0?landmarkOffset-iter->second.to():iter->second.to(),
+		// 				iter->second.transform().x(),
+		// 				iter->second.transform().y(),
+		// 				iter->second.infMatrix().at<double>(0, 0),
+		// 				iter->second.infMatrix().at<double>(0, 1),
+		// 				iter->second.infMatrix().at<double>(1, 1));
+		// 		}
+		// 		else
+		// 		{
+		// 			// EDGE_SE3_TRACKXYZ observed_vertex_id observing_vertex_id param_offset x y z inf_11 inf_12 inf_13 inf_22 inf_23 inf_33
+		// 			fprintf(file, "EDGE_SE3_TRACKXYZ %d %d %d %f %f %f %f %f %f %f %f %f\n",
+		// 				iter->second.from()<0?landmarkOffset-iter->second.from():iter->second.from(),
+		// 				iter->second.to()<0?landmarkOffset-iter->second.to():iter->second.to(),
+		// 				PARAM_OFFSET,
+		// 				iter->second.transform().x(),
+		// 				iter->second.transform().y(),
+		// 				iter->second.transform().z(),
+		// 				iter->second.infMatrix().at<double>(0, 0),
+		// 				iter->second.infMatrix().at<double>(0, 1),
+		// 				iter->second.infMatrix().at<double>(0, 2),
+		// 				iter->second.infMatrix().at<double>(1, 1),
+		// 				iter->second.infMatrix().at<double>(1, 2),
+		// 				iter->second.infMatrix().at<double>(2, 2));
+		// 		}
+		// 		continue;
+		// 	}
 
-			std::string prefix = isSlam2d()? "EDGE_SE2" :"EDGE_SE3:QUAT";
-			std::string suffix = "";
-			std::string to = uFormat(" %d", iter->second.to());
+		// 	std::string prefix = isSlam2d()? "EDGE_SE2" :"EDGE_SE3:QUAT";
+		// 	std::string suffix = "";
+		// 	std::string to = uFormat(" %d", iter->second.to());
 
-			bool isSE2 = true;
-			bool isSE3 = true;
+		// 	bool isSE2 = true;
+		// 	bool isSE3 = true;
 
-			if (iter->second.type() == Link::kGravity)
-			{
-				continue;
-			}
-			else if (iter->second.type() == Link::kPosePrior)
-			{
-				if (this->priorsIgnored())
-				{
-					continue;
-				}
-				if (isSlam2d())
-				{
-					if (1 / static_cast<double>(iter->second.infMatrix().at<double>(5,5)) >= 9999.0)
-					{
-						prefix = "EDGE_PRIOR_SE2_XY";
-						isSE2 = false;
-					}
-					else
-					{
-						prefix = "EDGE_PRIOR_SE2";
-					}
+		// 	if (iter->second.type() == Link::kGravity)
+		// 	{
+		// 		continue;
+		// 	}
+		// 	else if (iter->second.type() == Link::kPosePrior)
+		// 	{
+		// 		if (this->priorsIgnored())
+		// 		{
+		// 			continue;
+		// 		}
+		// 		if (isSlam2d())
+		// 		{
+		// 			if (1 / static_cast<double>(iter->second.infMatrix().at<double>(5,5)) >= 9999.0)
+		// 			{
+		// 				prefix = "EDGE_PRIOR_SE2_XY";
+		// 				isSE2 = false;
+		// 			}
+		// 			else
+		// 			{
+		// 				prefix = "EDGE_PRIOR_SE2";
+		// 			}
 
-					//  based on https://github.com/RainerKuemmerle/g2o/blob/38347944c6ad7a3b31976b97406ff0de20be1530/g2o/types/slam2d/edge_se2_prior.cpp#L42
-					//  there is no pid for the 2d prior case
-					to = "";
-				}
-				else
-				{
-					if (1 / static_cast<double>(iter->second.infMatrix().at<double>(3,3)) >= 9999.0 ||
-						1 / static_cast<double>(iter->second.infMatrix().at<double>(4,4)) >= 9999.0 ||
-						1 / static_cast<double>(iter->second.infMatrix().at<double>(5,5)) >= 9999.0)
-					{
-						to = "";
-						prefix = "EDGE_POINTXYZ_PRIOR";
-						isSE3 = false;
-					}
-					else
-					{
-						to = uFormat(" %d", PARAM_OFFSET);
-						prefix = "EDGE_SE3_PRIOR";
-					}
-				}
-			}
-			else if(this->isRobust() &&
-			   iter->second.type() != Link::kNeighbor &&
-			   iter->second.type() != Link::kNeighborMerged)
-			{
-				fprintf(file, "VERTEX_SWITCH %d 1\n", virtualVertexId);
-				fprintf(file, "EDGE_SWITCH_PRIOR %d 1 1.0\n", virtualVertexId);
-				prefix = isSlam2d() ? "EDGE_SE2_SWITCHABLE" : "EDGE_SE3_SWITCHABLE";
-				suffix = uFormat(" %d", virtualVertexId++);
-			}
+		// 			//  based on https://github.com/RainerKuemmerle/g2o/blob/38347944c6ad7a3b31976b97406ff0de20be1530/g2o/types/slam2d/edge_se2_prior.cpp#L42
+		// 			//  there is no pid for the 2d prior case
+		// 			to = "";
+		// 		}
+		// 		else
+		// 		{
+		// 			if (1 / static_cast<double>(iter->second.infMatrix().at<double>(3,3)) >= 9999.0 ||
+		// 				1 / static_cast<double>(iter->second.infMatrix().at<double>(4,4)) >= 9999.0 ||
+		// 				1 / static_cast<double>(iter->second.infMatrix().at<double>(5,5)) >= 9999.0)
+		// 			{
+		// 				to = "";
+		// 				prefix = "EDGE_POINTXYZ_PRIOR";
+		// 				isSE3 = false;
+		// 			}
+		// 			else
+		// 			{
+		// 				to = uFormat(" %d", PARAM_OFFSET);
+		// 				prefix = "EDGE_SE3_PRIOR";
+		// 			}
+		// 		}
+		// 	}
+		// 	else if(this->isRobust() &&
+		// 	   iter->second.type() != Link::kNeighbor &&
+		// 	   iter->second.type() != Link::kNeighborMerged)
+		// 	{
+		// 		fprintf(file, "VERTEX_SWITCH %d 1\n", virtualVertexId);
+		// 		fprintf(file, "EDGE_SWITCH_PRIOR %d 1 1.0\n", virtualVertexId);
+		// 		prefix = isSlam2d() ? "EDGE_SE2_SWITCHABLE" : "EDGE_SE3_SWITCHABLE";
+		// 		suffix = uFormat(" %d", virtualVertexId++);
+		// 	}
 
-			if(isSlam2d())
-			{
-				if (isSE2)
-				{
-					// EDGE_SE2 observed_vertex_id observing_vertex_id x y qx qy qz qw inf_11 inf_12 inf_13 inf_22 inf_23 inf_33
-					// EDGE_SE2_PRIOR observed_vertex_id x y qx qy qz qw inf_11 inf_12 inf_13 inf_22 inf_23 inf_33
-					fprintf(file, "%s %d%s%s %f %f %f %f %f %f %f %f %f\n",
-        					prefix.c_str(),
-        					iter->second.from(),
-        					to.c_str(),
-        					suffix.c_str(),
-        					iter->second.transform().x(),
-        					iter->second.transform().y(),
-        					iter->second.transform().theta(),
-        					iter->second.infMatrix().at<double>(0, 0),
-        					iter->second.infMatrix().at<double>(0, 1),
-        					iter->second.infMatrix().at<double>(0, 5),
-        					iter->second.infMatrix().at<double>(1, 1),
-        					iter->second.infMatrix().at<double>(1, 5),
-        					iter->second.infMatrix().at<double>(5, 5));
-				}
-				else
-				{
-					// EDGE_XY observed_vertex_id observing_vertex_id x y inf_11 inf_12 inf_22
-					// EDGE_POINTXY_PRIOR x y inf_11 inf_12 inf_22
-					fprintf(file, "%s %d%s%s %f %f %f %f %f\n",
-        					prefix.c_str(),
-        					iter->second.from(),
-        					to.c_str(),
-        					suffix.c_str(),
-        					iter->second.transform().x(),
-        					iter->second.transform().y(),
-        					iter->second.infMatrix().at<double>(0, 0),
-        					iter->second.infMatrix().at<double>(0, 1),
-        					iter->second.infMatrix().at<double>(1, 1));
-				}
-			}
-			else
-			{
-				if (isSE3)
-				{
-					// EDGE_SE3 observed_vertex_id observing_vertex_id x y z qx qy qz qw inf_11 inf_12 .. inf_16 inf_22 .. inf_66
-					// EDGE_SE3_PRIOR observed_vertex_id offset_parameter_id x y z qx qy qz qw inf_11 inf_12 .. inf_16 inf_22 .. inf_66
-					Eigen::Quaternionf q = iter->second.transform().getQuaternionf();
-					fprintf(file, "%s %d%s%s %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f\n",
-        					prefix.c_str(),
-        					iter->second.from(),
-        					to.c_str(),
-        					suffix.c_str(),
-        					iter->second.transform().x(),
-        					iter->second.transform().y(),
-        					iter->second.transform().z(),
-        					q.x(),
-        					q.y(),
-        					q.z(),
-        					q.w(),
-        					iter->second.infMatrix().at<double>(0, 0),
-        					iter->second.infMatrix().at<double>(0, 1),
-        					iter->second.infMatrix().at<double>(0, 2),
-        					iter->second.infMatrix().at<double>(0, 3),
-        					iter->second.infMatrix().at<double>(0, 4),
-        					iter->second.infMatrix().at<double>(0, 5),
-        					iter->second.infMatrix().at<double>(1, 1),
-        					iter->second.infMatrix().at<double>(1, 2),
-        					iter->second.infMatrix().at<double>(1, 3),
-        					iter->second.infMatrix().at<double>(1, 4),
-        					iter->second.infMatrix().at<double>(1, 5),
-        					iter->second.infMatrix().at<double>(2, 2),
-        					iter->second.infMatrix().at<double>(2, 3),
-        					iter->second.infMatrix().at<double>(2, 4),
-        					iter->second.infMatrix().at<double>(2, 5),
-        					iter->second.infMatrix().at<double>(3, 3),
-        					iter->second.infMatrix().at<double>(3, 4),
-        					iter->second.infMatrix().at<double>(3, 5),
-        					iter->second.infMatrix().at<double>(4, 4),
-        					iter->second.infMatrix().at<double>(4, 5),
-        					iter->second.infMatrix().at<double>(5, 5));
-				}
-				else
-				{
-					// EDGE_XYZ observed_vertex_id observing_vertex_id x y z qx qy qz qw inf_11 inf_12 .. inf_13 inf_22 .. inf_33
-					// EDGE_POINTXYZ_PRIOR observed_vertex_id x y z inf_11 inf_12 .. inf_13 inf_22 .. inf_33
-					fprintf(file, "%s %d%s%s %f %f %f %f %f %f %f %f %f\n",
-        					prefix.c_str(),
-        					iter->second.from(),
-        					to.c_str(),
-        					suffix.c_str(),
-        					iter->second.transform().x(),
-        					iter->second.transform().y(),
-        					iter->second.transform().z(),
-        					iter->second.infMatrix().at<double>(0, 0),
-        					iter->second.infMatrix().at<double>(0, 1),
-        					iter->second.infMatrix().at<double>(0, 2),
-        					iter->second.infMatrix().at<double>(1, 1),
-        					iter->second.infMatrix().at<double>(1, 2),
-        					iter->second.infMatrix().at<double>(2, 2));
-				}
-			}
-		}
+		// 	if(isSlam2d())
+		// 	{
+		// 		if (isSE2)
+		// 		{
+		// 			// EDGE_SE2 observed_vertex_id observing_vertex_id x y qx qy qz qw inf_11 inf_12 inf_13 inf_22 inf_23 inf_33
+		// 			// EDGE_SE2_PRIOR observed_vertex_id x y qx qy qz qw inf_11 inf_12 inf_13 inf_22 inf_23 inf_33
+		// 			fprintf(file, "%s %d%s%s %f %f %f %f %f %f %f %f %f\n",
+        // 					prefix.c_str(),
+        // 					iter->second.from(),
+        // 					to.c_str(),
+        // 					suffix.c_str(),
+        // 					iter->second.transform().x(),
+        // 					iter->second.transform().y(),
+        // 					iter->second.transform().theta(),
+        // 					iter->second.infMatrix().at<double>(0, 0),
+        // 					iter->second.infMatrix().at<double>(0, 1),
+        // 					iter->second.infMatrix().at<double>(0, 5),
+        // 					iter->second.infMatrix().at<double>(1, 1),
+        // 					iter->second.infMatrix().at<double>(1, 5),
+        // 					iter->second.infMatrix().at<double>(5, 5));
+		// 		}
+		// 		else
+		// 		{
+		// 			// EDGE_XY observed_vertex_id observing_vertex_id x y inf_11 inf_12 inf_22
+		// 			// EDGE_POINTXY_PRIOR x y inf_11 inf_12 inf_22
+		// 			fprintf(file, "%s %d%s%s %f %f %f %f %f\n",
+        // 					prefix.c_str(),
+        // 					iter->second.from(),
+        // 					to.c_str(),
+        // 					suffix.c_str(),
+        // 					iter->second.transform().x(),
+        // 					iter->second.transform().y(),
+        // 					iter->second.infMatrix().at<double>(0, 0),
+        // 					iter->second.infMatrix().at<double>(0, 1),
+        // 					iter->second.infMatrix().at<double>(1, 1));
+		// 		}
+		// 	}
+		// 	else
+		// 	{
+		// 		if (isSE3)
+		// 		{
+		// 			// EDGE_SE3 observed_vertex_id observing_vertex_id x y z qx qy qz qw inf_11 inf_12 .. inf_16 inf_22 .. inf_66
+		// 			// EDGE_SE3_PRIOR observed_vertex_id offset_parameter_id x y z qx qy qz qw inf_11 inf_12 .. inf_16 inf_22 .. inf_66
+		// 			Eigen::Quaternionf q = iter->second.transform().getQuaternionf();
+		// 			fprintf(file, "%s %d%s%s %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f\n",
+        // 					prefix.c_str(),
+        // 					iter->second.from(),
+        // 					to.c_str(),
+        // 					suffix.c_str(),
+        // 					iter->second.transform().x(),
+        // 					iter->second.transform().y(),
+        // 					iter->second.transform().z(),
+        // 					q.x(),
+        // 					q.y(),
+        // 					q.z(),
+        // 					q.w(),
+        // 					iter->second.infMatrix().at<double>(0, 0),
+        // 					iter->second.infMatrix().at<double>(0, 1),
+        // 					iter->second.infMatrix().at<double>(0, 2),
+        // 					iter->second.infMatrix().at<double>(0, 3),
+        // 					iter->second.infMatrix().at<double>(0, 4),
+        // 					iter->second.infMatrix().at<double>(0, 5),
+        // 					iter->second.infMatrix().at<double>(1, 1),
+        // 					iter->second.infMatrix().at<double>(1, 2),
+        // 					iter->second.infMatrix().at<double>(1, 3),
+        // 					iter->second.infMatrix().at<double>(1, 4),
+        // 					iter->second.infMatrix().at<double>(1, 5),
+        // 					iter->second.infMatrix().at<double>(2, 2),
+        // 					iter->second.infMatrix().at<double>(2, 3),
+        // 					iter->second.infMatrix().at<double>(2, 4),
+        // 					iter->second.infMatrix().at<double>(2, 5),
+        // 					iter->second.infMatrix().at<double>(3, 3),
+        // 					iter->second.infMatrix().at<double>(3, 4),
+        // 					iter->second.infMatrix().at<double>(3, 5),
+        // 					iter->second.infMatrix().at<double>(4, 4),
+        // 					iter->second.infMatrix().at<double>(4, 5),
+        // 					iter->second.infMatrix().at<double>(5, 5));
+		// 		}
+		// 		else
+		// 		{
+		// 			// EDGE_XYZ observed_vertex_id observing_vertex_id x y z qx qy qz qw inf_11 inf_12 .. inf_13 inf_22 .. inf_33
+		// 			// EDGE_POINTXYZ_PRIOR observed_vertex_id x y z inf_11 inf_12 .. inf_13 inf_22 .. inf_33
+		// 			fprintf(file, "%s %d%s%s %f %f %f %f %f %f %f %f %f\n",
+        // 					prefix.c_str(),
+        // 					iter->second.from(),
+        // 					to.c_str(),
+        // 					suffix.c_str(),
+        // 					iter->second.transform().x(),
+        // 					iter->second.transform().y(),
+        // 					iter->second.transform().z(),
+        // 					iter->second.infMatrix().at<double>(0, 0),
+        // 					iter->second.infMatrix().at<double>(0, 1),
+        // 					iter->second.infMatrix().at<double>(0, 2),
+        // 					iter->second.infMatrix().at<double>(1, 1),
+        // 					iter->second.infMatrix().at<double>(1, 2),
+        // 					iter->second.infMatrix().at<double>(2, 2));
+		// 		}
+		// 	}
+		// }
 		UINFO("Graph saved to %s", fileName.c_str());
 
 		fclose(file);
